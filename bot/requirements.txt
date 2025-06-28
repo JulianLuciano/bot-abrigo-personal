@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+requests
+python-telegram-bot==20.3
+pydantic
+numpy
+pandas
+catboost
+openmeteo-requests
+requests-cache
+retry-requests
