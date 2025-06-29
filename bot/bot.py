@@ -150,10 +150,13 @@ async def handle_coordinates(update: Update, context: ContextTypes.DEFAULT_TYPE)
         payload = {"lat": lat, "lon": lon, 'lead': hours_ahead}
         
         logger.info(f"Coordenadas recibidas: lat={lat}, lon={lon}, hours_ahead={hours_ahead}")
+
         r = requests.post(API_URL, json=payload)
-        logger.info(f"Respuesta de la API: {data}")
         if r.status_code == 200:
             data = r.json()
+            
+            logger.info(f"Respuesta de la API: {data}")
+
             class_1st = data["class_1st"]
             prob_1st = round(data["prob_1st"] * 100)
             class_2nd = data["class_2nd"]
