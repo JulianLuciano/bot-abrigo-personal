@@ -2,7 +2,7 @@ import requests
 import os
 import logging
 import utils as ut
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import Conflict
 from telegram.ext import (
     ApplicationBuilder,
@@ -10,7 +10,8 @@ from telegram.ext import (
     MessageHandler,
     ContextTypes,
     filters,
-    ConversationHandler
+    ConversationHandler,
+    CallbackQueryHandler
 )
 
 # Estados de la conversación
@@ -190,15 +191,15 @@ async def handle_coordinates(update: Update, context: ContextTypes.DEFAULT_TYPE)
             
             await update.message.reply_text(msg, parse_mode="Markdown")
             
-            reply_keyboard = [['Sí', 'No']]
+            reply_keyboard = [
+                [InlineKeyboardButton("Sí", callback_data="rain_yes"),
+                InlineKeyboardButton("No", callback_data="rain_no"),]
+                ]
+            
             await update.message.reply_text(
-                "¿Querés saber si va a llover?",
-                reply_markup=ReplyKeyboardMarkup(
-                    reply_keyboard, 
-                    one_time_keyboard=True,
-                    input_field_placeholder='Sí o No?'
-                )
-            )
+                                "¿Querés saber si va a llover?",
+                                reply_markup=InlineKeyboardMarkup(reply_keyboard)
+                            )
             return ASK_RAIN
             
         else:
@@ -211,6 +212,25 @@ async def handle_coordinates(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("❗ Por favor mandá coordenadas como: -34.58,-58.42. \nAntes, volvé a iniciarme con /start")
         return ConversationHandler.END
 
+async def rain_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()  # responder para que desaparezca el "cargando"
+    choice = query.data
+
+    if choice == "rain_yes":
+        # mostrar probabilidad de lluvia, igual que antes
+        prob = context.user_data.get('precipitation_prob', 0)
+        prec_msg = ut.lluvia_msj(prob, context.user_data.get('precipitation', 0))
+        await query.edit_message_text(f"La probabilidad de lluvia es del {prob}%. {prec_msg}\n\nSi querés otra recomendación, podés usar /abrigo o /abrigo_nhs ☀️❄️")
+    else:
+        await query.edit_message_text("Si querés otra recomendación, podés usar /abrigo o /abrigo_nhs ☀️❄️")
+    
+    if 'hours_ahead' in context.user_data:
+        del context.user_data['hours_ahead']
+    
+    return ConversationHandler.END
+
+
 async def handle_rain_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_response = update.message.text.lower()
     logger.info(f"Respuesta del usuario sobre lluvia: {user_response}")
@@ -222,6 +242,8 @@ async def handle_rain_response(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"{ut.lluvia_msj(context.user_data['precipitation_prob'], context.user_data['precipitation'])}.",
                 reply_markup=None
             )
+            await update.message.reply_text("Si querés otra recomendación, podés usar /abrigo o /abrigo_nhs ☀️❄️")
+        else: 
             await update.message.reply_text("Si querés otra recomendación, podés usar /abrigo o /abrigo_nhs ☀️❄️")
         
         if 'hours_ahead' in context.user_data:
@@ -296,6 +318,7 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(nhs_conversation_handler)
     app.add_handler(abrigo_conversation_handler)
+    app.add_handler(CallbackQueryHandler(rain_button_handler))
     
     app.run_polling()
 
