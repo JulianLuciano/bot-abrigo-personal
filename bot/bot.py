@@ -1,7 +1,9 @@
 import requests
 import os
+import logging
 import utils as ut
 from telegram import Update, ReplyKeyboardMarkup
+from telegram.error import Conflict
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -17,6 +19,14 @@ ASK_HOURS, ASK_COORDINATES, ASK_RAIN, RESPOND_RAIN = range(4)
 TOKEN = os.environ["TOKEN"]
 API_URL = os.environ.get("API_URL")
 VIDEO_HELP_ID = "BAACAgEAAxkBAAIDlWg-WReZDKCtaoSzifGdWYoMjiKxAALNBQACtDn4RZHLQHkH-6GqNgQ" 
+
+# Configuración básica del logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO  # Cambiá a DEBUG para más detalles o ERROR si solo querés errores
+)
+
+logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
@@ -139,7 +149,9 @@ async def handle_coordinates(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         payload = {"lat": lat, "lon": lon, 'lead': hours_ahead}
         
+        logger.info(f"Coordenadas recibidas: lat={lat}, lon={lon}, hours_ahead={hours_ahead}")
         r = requests.post(API_URL, json=payload)
+        logger.info(f"Respuesta de la API: {data}")
         if r.status_code == 200:
             data = r.json()
             class_1st = data["class_1st"]
@@ -191,23 +203,29 @@ async def handle_coordinates(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return ConversationHandler.END
             
     except Exception as e:
+        logger.error("Error en handle_coordinates", exc_info=True)
         print(f"Error: {e}")
         await update.message.reply_text("❗ Por favor mandá coordenadas como: -34.58,-58.42. \nAntes, volvé a iniciarme con /start")
         return ConversationHandler.END
 
 async def handle_rain_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_response = update.message.text.lower()
+    logger.info(f"Respuesta del usuario sobre lluvia: {user_response}")
     
-    if user_response in ['sí', 'si', 's']:
-        await update.message.reply_text(
-            f"La probabilidad de lluvia es del {context.user_data['precipitation_prob']}%. " + 
-            f"{ut.lluvia_msj(context.user_data['precipitation_prob'], context.user_data['precipitation'])}.",
-            reply_markup=None
-        )
-    
-    if 'hours_ahead' in context.user_data:
-        del context.user_data['hours_ahead']
-    
+    try:
+        if user_response in ['sí', 'si', 's']:
+            await update.message.reply_text(
+                f"La probabilidad de lluvia es del {context.user_data['precipitation_prob']}%. " + 
+                f"{ut.lluvia_msj(context.user_data['precipitation_prob'], context.user_data['precipitation'])}.",
+                reply_markup=None
+            )
+            await update.message.reply_text("Si querés otra recomendación, podés usar /abrigo o /abrigo_nhs ☀️❄️")
+        
+        if 'hours_ahead' in context.user_data:
+            del context.user_data['hours_ahead']
+    except Exception:
+        logger.error("Error en handle_rain_response", exc_info=True)
+        
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -240,6 +258,7 @@ async def abrigo_nhs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await ask_for_hours(update, context)
 
 def main():
+    logger.info("Inicializando el bot...")
     app = ApplicationBuilder().token(TOKEN).build()
     
     # Handler para abrigo_nhs
@@ -277,5 +296,11 @@ def main():
     
     app.run_polling()
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    try:
+        main()
+    except Conflict:
+        logger.error("Conflicto: el bot ya está siendo ejecutado en otro lugar.", exc_info=True)
+        print("El bot ya está siendo ejecutado en otro lugar. Cerralo antes de volver a usarlo 😊.")
+    except Exception as e:
+        logger.error("Error inesperado al iniciar el bot", exc_info=True)
