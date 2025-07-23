@@ -15,7 +15,7 @@ from telegram.ext import (
 )
 
 # Estados de la conversación
-ASK_HOURS, ASK_COORDINATES, ASK_RAIN, RESPOND_RAIN = range(4)
+ASK_HOURS, ASK_COORDINATES, ASK_RAIN, RESPOND_RAIN, HANDLE_LOCATION = range(5)
 
 TOKEN = os.environ["TOKEN"]
 API_URL = os.environ.get("API_URL")
@@ -103,14 +103,32 @@ async def handle_hours(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ASK_HOURS
 
 async def ask_for_coordinates(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Por favor, enviá la latitud y longitud de tu ubicación separadas por coma (ej: -34.58,-58.42)")
+    await update.message.reply_text(
+        "Por favor, enviá la latitud y longitud de tu ubicación (ej: -34.58,-58.42) o compartí tu ubicación con el botón de Telegram.\n\n"
+        "También podés usar /share_location para que te muestre el botón para compartirla."
+    )
     return ASK_COORDINATES
+
+async def share_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    reply_markup = ReplyKeyboardMarkup(
+        [[KeyboardButton(text="Compartir mi ubicación", request_location=True)]],
+        one_time_keyboard=True
+    )
+    await update.message.reply_text(
+        "Tocá el botón para compartir tu ubicación:",
+        reply_markup=reply_markup
+    )
+    return HANDLE_LOCATION
+
+async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lat = update.message.location.latitude
+    lon = update.message.location.longitude
+    return await process_coordinates(update, context, lat, lon)
 
 async def handle_coordinates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         text = update.message.text.strip()
         
-        # Diccionario de atajos secretos (se aceptan variantes de mayúsculas y tildes)
         location_shortcuts = {
             'cordoba': (-31.4580911, -64.2199552),
             'córdoba': (-31.4580911, -64.2199552),
@@ -123,18 +141,15 @@ async def handle_coordinates(update: Update, context: ContextTypes.DEFAULT_TYPE)
             'capital federal': (-34.5821438, -58.4303663),
         }
         
-        # Verificar si el texto es un atajo (ignorando mayúsculas/tildes/espacios)
         lower_text = text.lower().replace(" ", "")
         normalized_text = lower_text.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
         
-        # Buscar coincidencia en los atajos
         lat, lon = None, None
         for shortcut, coords in location_shortcuts.items():
             if normalized_text == shortcut.lower().replace(" ", ""):
                 lat, lon = coords
                 break
         
-        # Si no es un atajo, procesar como coordenadas normales
         if lat is None or lon is None:
             cleaned_text = text.replace("(", "").replace(")", "").replace(" ", "")
             parts = cleaned_text.split(",")
@@ -146,8 +161,18 @@ async def handle_coordinates(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 return ASK_COORDINATES
                 
             lat, lon = map(float, parts)
-        hours_ahead = context.user_data.get('hours_ahead', 0)
+        
+        return await process_coordinates(update, context, lat, lon)
+            
+    except Exception as e:
+        logger.error("Error en handle_coordinates", exc_info=True)
+        print(f"Error: {e}")
+        await update.message.reply_text("❗ Por favor mandá coordenadas como: -34.58,-58.42. \nAntes, volvé a iniciarme con /start")
+        return ConversationHandler.END
 
+async def process_coordinates(update: Update, context: ContextTypes.DEFAULT_TYPE, lat: float, lon: float):
+    try:
+        hours_ahead = context.user_data.get('hours_ahead', 0)
         payload = {"lat": lat, "lon": lon, 'lead': hours_ahead}
         
         logger.info(f"Coordenadas recibidas: lat={lat}, lon={lon}, hours_ahead={hours_ahead}")
@@ -207,9 +232,9 @@ async def handle_coordinates(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return ConversationHandler.END
             
     except Exception as e:
-        logger.error("Error en handle_coordinates", exc_info=True)
+        logger.error("Error en process_coordinates", exc_info=True)
         print(f"Error: {e}")
-        await update.message.reply_text("❗ Por favor mandá coordenadas como: -34.58,-58.42. \nAntes, volvé a iniciarme con /start")
+        await update.message.reply_text("❗ Ocurrió un error al procesar tu ubicación. \nPor favor, volvé a iniciarme con /start")
         return ConversationHandler.END
 
 async def rain_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -291,8 +316,12 @@ def main():
         entry_points=[CommandHandler("abrigo_nhs", abrigo_nhs)],
         states={
             ASK_HOURS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_hours)],
-            ASK_COORDINATES: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_coordinates)],
+            ASK_COORDINATES: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_coordinates),
+                MessageHandler(filters.LOCATION, handle_location)
+            ],
             ASK_RAIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_rain_response)],
+            HANDLE_LOCATION: [MessageHandler(filters.LOCATION, handle_location)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
         allow_reentry=True
@@ -307,8 +336,12 @@ def main():
             CommandHandler("abrigo_4h", abrigo_4h)
         ],
         states={
-            ASK_COORDINATES: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_coordinates)],
+            ASK_COORDINATES: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_coordinates),
+                MessageHandler(filters.LOCATION, handle_location)
+            ],
             ASK_RAIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_rain_response)],
+            HANDLE_LOCATION: [MessageHandler(filters.LOCATION, handle_location)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
         allow_reentry=True
@@ -316,6 +349,7 @@ def main():
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("share_location", share_location))
     app.add_handler(nhs_conversation_handler)
     app.add_handler(abrigo_conversation_handler)
     app.add_handler(CallbackQueryHandler(rain_button_handler))
