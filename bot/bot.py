@@ -108,15 +108,16 @@ async def handle_hours(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def ask_for_coordinates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Por favor, enviá la latitud y longitud de tu ubicación (ej: -34.58,-58.42) o compartí tu ubicación con el botón de Telegram.\n\n"
-        "También podés usar /share_location para que te muestre el botón para compartirla."
+        "Por favor, enviá la latitud y longitud de tu ubicación (ej: -34.58,-58.42). \n\n"
+        "También podés usar /share_location para compartir directamente tu ubicación."
     )
     return ASK_COORDINATES
 
 async def share_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = ReplyKeyboardMarkup(
         [[KeyboardButton(text="Compartir mi ubicación", request_location=True)]],
-        one_time_keyboard=True
+        one_time_keyboard=True,
+        resize_keyboard=True
     )
     await update.message.reply_text(
         "Tocá el botón para compartir tu ubicación:",
