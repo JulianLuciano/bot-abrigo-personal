@@ -2,7 +2,7 @@ import requests
 import os
 import logging
 import utils as ut
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
 from telegram.error import Conflict
 from telegram.ext import (
     ApplicationBuilder,
@@ -44,20 +44,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(welcome_text)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = (
-        "🎥 *Guía de uso del bot*\n\n"
-        "1\. Usá uno de estos comandos:\n"
-        "   /abrigo \- Recomendación actual\n"
-        "   /abrigo\_2h \- Para dentro de 2 horas\n"
-        "   /abrigo\_3h \- Para dentro de 3 horas\n"
-        "   /abrigo\_4h \- Para dentro de 4 horas\n"
-        "   /abrigo\_nhs \- Para N horas adelante \(hasta 48\)\n\n"
-        "2\. Enviá coordenadas en formato `latitud,longitud`\n"
-        "3\. Recibirás recomendaciones de abrigo\n"
-        "4\. Podés consultar la probabilidad de lluvia\n\n"
-        "*Ejemplo válido:* `\-34\.58543,\-58\.42567`\n\n"
-        "Usá el comando /start para ver todas las opciones"
-    )
+    help_text = r"""
+🎥 *Guía de uso del bot*
+
+1\. Usá uno de estos comandos:
+   /abrigo \- Recomendación actual
+   /abrigo\_2h \- Para dentro de 2 horas
+   /abrigo\_3h \- Para dentro de 3 horas
+   /abrigo\_4h \- Para dentro de 4 horas
+   /abrigo\_nhs \- Para N horas adelante \(hasta 48\)
+
+2\. Enviá coordenadas en formato `latitud,longitud`
+3\. Recibirás recomendaciones de abrigo
+4\. Podés consultar la probabilidad de lluvia
+
+*Ejemplo válido:* `\-34\.58543,\-58\.42567`
+
+Usá el comando /start para ver todas las opciones
+"""
     
     try:
         await update.message.reply_video(
